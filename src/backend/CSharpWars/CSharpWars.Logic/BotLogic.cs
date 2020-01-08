@@ -48,7 +48,12 @@ namespace CSharpWars.Logic
 
         public async Task<IList<BotDto>> GetAllActiveBots()
         {
-            throw new NotImplementedException();
+          var dateTimeToCompare = DateTime.UtcNow.AddSeconds(-10);
+
+          var activeBots = await _botRepository.Find(predicate:x => x.CurrentHealth > 0 || 
+                                                     x.TimeOfDeath > dateTimeToCompare, 
+                                                     include:include => include.Player);
+          return _botMapper.Map(activeBots);
         }
 
         public async Task<IList<BotDto>> GetAllLiveBots()
@@ -63,7 +68,32 @@ namespace CSharpWars.Logic
 
         public async Task<BotDto> CreateBot(BotToCreateDto botToCreate)
         {
-            throw new NotImplementedException();
+          var bot = _botToCreateMapper.Map(botToCreate);
+          var arena = await _arenaLogic.GetArena();
+          var player = await _playerRepository.Single(predicate: x => x.id = botToCreate.PlayerId);
+
+          player.LastDeployment - DateTime.Utc.Now;
+
+          bot.Player = player;
+          bot.Orientation = _randomHelper.Get<PossibleOrientations>();
+          bot.X = 2;
+          bot.Y = 2;
+          bot.CurrentHealth = bot.MaximumHealth;
+          bot.CurrentStamina = bot.MaximumStamina;
+
+          bot.Memory = new Dictionary<string, string>().serialize();
+          bot.TimeOfDeath = DateTime.MAxValue;
+
+          using (var transaction = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled)) {
+            bot = await _botRepository.Create(bot);
+            var botScript = await _scriptRepository.Single(predicate:x => x.Id == bot.Id);
+            botScript.Script = botToCreate.Script;
+            await _scriptRepository.Update(botScript);
+            await _playerRepository.Update(player);
+
+            transaction.Complete();
+          }
+
         }
 
         public async Task UpdateBots(IList<BotDto> bots)
